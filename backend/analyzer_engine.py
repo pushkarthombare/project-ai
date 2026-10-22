@@ -10,13 +10,17 @@ Images        → llava:13b
 PDF support   → pip install pypdf
 """
 
+import os
 import base64
 import io
 import json
 import requests
 from engine import detect_language
-
-OLLAMA_URL   = "http://localhost:11434/api/generate"
+OLLAMA_URL = os.environ["OLLAMA_URL"]
+OLLAMA_HEADERS = {
+    "Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}",
+    "Content-Type": "application/json",
+}
 TEXT_MODEL   = "llama3.2"
 VISION_MODEL = "llava:13b"
 
@@ -171,10 +175,12 @@ def stream_analyze(
 
     try:
         with requests.post(
-            OLLAMA_URL, json=body,
+            OLLAMA_URL,
+            headers=OLLAMA_HEADERS,
+            json=body,
             stream=True,
             timeout=(10, 180),
-        ) as resp:
+            ) as resp:
             if resp.status_code != 200:
                 yield f"__ERROR__:Ollama error {resp.status_code}: {resp.text[:200]}"
                 return
@@ -231,7 +237,12 @@ def _call_ollama(model, prompt, images=None, tokens=350, timeout=90):
     }
     if images:
         body["images"] = images
-    r = requests.post(OLLAMA_URL, json=body, timeout=timeout)
+        r = requests.post(
+            OLLAMA_URL,
+            headers=OLLAMA_HEADERS,
+            json=body,
+            timeout=timeout,
+        )
     r.raise_for_status()
     return r.json().get("response", "").strip()
 

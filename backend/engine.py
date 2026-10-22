@@ -1,10 +1,16 @@
+
+import os
 import re
 import requests
 import json
 from memory import get_history
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL      = "llama3.2"
+OLLAMA_URL = os.environ["OLLAMA_URL"]
+OLLAMA_HEADERS = {
+    "Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}",
+    "Content-Type": "application/json",
+}
+MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
 MARATHI_KEYWORDS = {
     "आहे","आणि","काय","कसे","मला","तुम्ही","आपण",
@@ -31,22 +37,25 @@ def detect_language(text: str) -> str:
 
 
 def _call(prompt: str, max_tokens: int = 300, temperature: float = 0.3) -> str:
+    
     resp = requests.post(
-        OLLAMA_URL,
-        json={
-            "model":   MODEL,
-            "prompt":  prompt,
-            "stream":  False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens,
-                "stop": ["\n\n\n"],
-            },
+    OLLAMA_URL,
+    headers=OLLAMA_HEADERS,
+    json={
+        "model": MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": temperature,
+            "num_predict": max_tokens,
+            "stop": ["\n\n\n"],
         },
-        timeout=90,
-    )
+    },
+    timeout=90,
+)
     resp.raise_for_status()
     return resp.json().get("response", "").strip()
+
 
 
 def _make_summary(explanation: str) -> str:
