@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API = import.meta.env.VITE_API_URL;
 
 /* ───────── helpers ───────── */
 const MR = new Set(["आहे","आणि","काय","कसे","मला","तुम्ही","आपण","सांगा","करा","हे","ते","नाही","होय","मराठी","त्याचा","त्याची","आम्ही","तुमचा","कोण","कुठे"]);
