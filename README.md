@@ -66,8 +66,8 @@ personal-ai/
 ### 1️⃣ Clone the repository
 
 ```bash
-git clone https://github.com/khetmalisvedant-tech/personal-ai.git
-cd personal-ai
+git clone https://github.com/pushkarthombare/personal-ai.git
+cd project-ai
 ```
 
 ---
@@ -143,9 +143,7 @@ Feel free to fork the repo and submit a pull request.
 ---
 
 ## 👨‍💻 Team
-
-* Vedant Khetmalis
-* Team Members (add names here)
+# Pushkar Thombare
 
 ---
 
