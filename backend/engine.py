@@ -4,15 +4,23 @@ import re
 import requests
 import json
 from memory import get_history
+from dotenv import load_dotenv
 
-OLLAMA_URL = os.environ["OLLAMA_URL"]
+load_dotenv()
+
+OLLAMA_URL = os.environ.get(
+    "OLLAMA_URL", "http://localhost:11434/api/generate"
+)
 OLLAMA_HEADERS = {
-    "Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}",
     "Content-Type": "application/json",
 }
-MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
-MARATHI_KEYWORDS = {
+if OLLAMA_API_KEY:
+    OLLAMA_HEADERS["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+
+MARATHI_KEYWORDS= {
     "आहे","आणि","काय","कसे","मला","तुम्ही","आपण",
     "सांगा","करा","हे","ते","नाही","होय","मराठी",
     "त्याचा","त्याची","आम्ही","तुमचा","कोण","कुठे"
@@ -36,26 +44,89 @@ def detect_language(text: str) -> str:
     return "hindi"
 
 
-def _call(prompt: str, max_tokens: int = 300, temperature: float = 0.3) -> str:
-    
-    resp = requests.post(
-    OLLAMA_URL,
-    headers=OLLAMA_HEADERS,
-    json={
+
+
+
+import time
+import requests
+
+
+def _call(
+    prompt: str,
+    max_tokens: int = 300,
+    temperature: float = 0.3
+) -> str:
+
+    payload = {
         "model": MODEL,
         "prompt": prompt,
         "stream": False,
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
-            "stop": ["\n\n\n"],
         },
-    },
-    timeout=90,
-)
-    resp.raise_for_status()
-    return resp.json().get("response", "").strip()
+    }
 
+    for attempt in range(3):
+
+        try:
+            print(f"OLLAMA ATTEMPT: {attempt + 1}/3")
+            print("OLLAMA URL:", OLLAMA_URL)
+            print("MODEL:", MODEL)
+
+            resp = requests.post(
+                OLLAMA_URL,
+                headers=OLLAMA_HEADERS,
+                json=payload,
+                timeout=180,
+            )
+
+            print("OLLAMA STATUS:", resp.status_code)
+
+            resp.raise_for_status()
+
+            data = resp.json()
+
+            answer = data.get("response", "").strip()
+
+            print("OLLAMA RAW RESPONSE:", data)
+            print("OLLAMA ANSWER:", repr(answer))
+
+            # Ollama may return an empty response while
+            # loading the model. Retry instead of failing.
+            if not answer:
+                print(
+                    "Empty response received. "
+                    f"Reason: {data.get('done_reason', 'unknown')}"
+                )
+
+                if attempt < 2:
+                    time.sleep(3)
+                    continue
+
+                raise ValueError(
+                    f"Ollama returned an empty response "
+                    f"after 3 attempts: {data}"
+                )
+
+            return answer
+
+        except requests.Timeout:
+            print("OLLAMA TIMEOUT")
+
+            if attempt < 2:
+                wait_time = 5*(attempt + 1)
+                print(f"waiting {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue
+
+            raise
+
+        except requests.RequestException as e:
+            print("OLLAMA REQUEST ERROR:", str(e))
+            raise
+
+    raise ValueError("Ollama failed to generate a response.")
 
 
 def _make_summary(explanation: str) -> str:
@@ -115,17 +186,36 @@ def generate_tutor_response(user_input: str, session_id: str = "default") -> dic
 
     for attempt in range(2):
         try:
-            explanation = _call(explanation_prompt, max_tokens=180, temperature=0.3)
-            last_error  = None
+            explanation = _call(
+                explanation_prompt,
+                max_tokens=180,
+                temperature=0.3
+            ) 
+
+            if not explanation.strip():
+                raise ValueError("Ollama returned an empty explanation.")
+
+            last_error = None
             break
-        except requests.Timeout:
+
+        except requests.Timeout as e:
             last_error = "timeout"
-            print(f"⏱ Ollama timeout on attempt {attempt + 1}/2")
+            print(f"⏱ Ollama timeout on attempt {attempt + 1}/2: {e}")
+
+            if attempt < 1:
+                time.sleep(3)
+
         except requests.RequestException as e:
             last_error = str(e)
             print(f"❌ Ollama request error: {e}")
             break
 
+        except ValueError as e:
+            last_error = str(e)
+            print(f"❌ Ollama generation error: {e}")
+
+            if attempt < 1:
+                time.sleep(3)
     if last_error:
         msg = (
             "Ollama is taking too long. Please try again."

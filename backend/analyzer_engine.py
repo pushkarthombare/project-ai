@@ -16,12 +16,19 @@ import io
 import json
 import requests
 from engine import detect_language
+
 OLLAMA_URL = os.environ["OLLAMA_URL"]
+
 OLLAMA_HEADERS = {
-    "Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}",
     "Content-Type": "application/json",
 }
-TEXT_MODEL   = "llama3.2"
+
+api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
+
+if api_key:
+    OLLAMA_HEADERS["Authorization"] = f"Bearer {api_key}"
+
+TEXT_MODEL   = "llama3.2:3b"
 VISION_MODEL = "llava:13b"
 
 
@@ -66,7 +73,7 @@ def _strip_json_wrapper(text: str) -> str:
 TOKEN_BUDGET = {
     # (brief, balanced, detailed)
     "summary":   (120, 250, 450),
-    "explain":   (150, 300, 550),
+    "explain":   (200, 350, 600),
     "keypoints": (100, 200, 350),
     "simplify":  (120, 240, 400),
     "critical":  (200, 380, 650),
@@ -79,7 +86,10 @@ MODE_PROMPTS = {
     "explain":
         "Provide a clear EXPLANATION. Break down concepts, clarify meaning and relationships.",
     "keypoints":
-        "Extract KEY POINTS as a clean numbered list. Most important ideas only.",
+    "Extract the most important KEY POINTS as a clean numbered list. "
+    "Use sequential numbering: 1, 2, 3, 4, and so on. "
+    "Do not repeat numbers. Complete every point and include important "
+    "equations, definitions, and conclusions. Do not stop mid-sentence.",
     "simplify":
         "SIMPLIFY so a 10-year-old understands. Use plain language and analogies. No jargon.",
     "critical":
@@ -228,21 +238,28 @@ def stream_analyze(
 # ════════════════════════════════════════════════════════════════════════════
 # NON-STREAMING helpers  (kept for backward compatibility)
 # ════════════════════════════════════════════════════════════════════════════
+
 def _call_ollama(model, prompt, images=None, tokens=350, timeout=90):
     body = {
-        "model":   model,
-        "prompt":  prompt,
-        "stream":  False,
-        "options": {"temperature": 0.25, "num_predict": tokens, "top_p": 0.9},
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.25,
+            "num_predict": tokens,
+            "top_p": 0.9,
+        },
     }
+
     if images:
         body["images"] = images
-        r = requests.post(
-            OLLAMA_URL,
-            headers=OLLAMA_HEADERS,
-            json=body,
-            timeout=timeout,
-        )
+
+    r = requests.post(
+        OLLAMA_URL,
+        headers=OLLAMA_HEADERS,
+        json=body,
+        timeout=timeout,
+    )
     r.raise_for_status()
     return r.json().get("response", "").strip()
 
