@@ -8,18 +8,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OLLAMA_URL = os.environ.get(
-    "OLLAMA_URL", "http://localhost:11434/api/generate"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+MODEL = os.environ.get(
+    "GROQ_MODEL",
+    "llama-3.3-70b-versatile"
 )
-OLLAMA_HEADERS = {
+
+GROQ_HEADERS = {
     "Content-Type": "application/json",
+    "Authorization": f"Bearer {GROQ_API_KEY}",
 }
-OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
-MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
-
-if OLLAMA_API_KEY:
-    OLLAMA_HEADERS["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
-
 MARATHI_KEYWORDS= {
     "आहे","आणि","काय","कसे","मला","तुम्ही","आपण",
     "सांगा","करा","हे","ते","नाही","होय","मराठी",
@@ -57,77 +57,70 @@ def _call(
     temperature: float = 0.3
 ) -> str:
 
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY is not configured.")
+
     payload = {
         "model": MODEL,
-        "prompt": prompt,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
         "stream": False,
-        "options": {
-            "temperature": temperature,
-            "num_predict": max_tokens,
-        },
     }
 
     for attempt in range(3):
-
         try:
-            print(f"OLLAMA ATTEMPT: {attempt + 1}/3")
-            print("OLLAMA URL:", OLLAMA_URL)
-            print("MODEL:", MODEL)
+            print(f"GROQ ATTEMPT: {attempt + 1}/3")
+            print("GROQ MODEL:", MODEL)
 
             resp = requests.post(
-                OLLAMA_URL,
-                headers=OLLAMA_HEADERS,
+                GROQ_URL,
+                headers=GROQ_HEADERS,
                 json=payload,
-                timeout=180,
+                timeout=120,
             )
 
-            print("OLLAMA STATUS:", resp.status_code)
+            print("GROQ STATUS:", resp.status_code)
 
             resp.raise_for_status()
 
             data = resp.json()
 
-            answer = data.get("response", "").strip()
+            answer = (
+                data.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+                .strip()
+            )
 
-            print("OLLAMA RAW RESPONSE:", data)
-            print("OLLAMA ANSWER:", repr(answer))
-
-            # Ollama may return an empty response while
-            # loading the model. Retry instead of failing.
             if not answer:
-                print(
-                    "Empty response received. "
-                    f"Reason: {data.get('done_reason', 'unknown')}"
-                )
-
-                if attempt < 2:
-                    time.sleep(3)
-                    continue
-
                 raise ValueError(
-                    f"Ollama returned an empty response "
-                    f"after 3 attempts: {data}"
+                    "Groq returned an empty response."
                 )
+
+            print("GROQ ANSWER:", repr(answer))
 
             return answer
 
         except requests.Timeout:
-            print("OLLAMA TIMEOUT")
+            print("GROQ TIMEOUT")
 
             if attempt < 2:
-                wait_time = 5*(attempt + 1)
-                print(f"waiting {wait_time} seconds...")
-                time.sleep(wait_time)
+                time.sleep(3 * (attempt + 1))
                 continue
 
             raise
 
         except requests.RequestException as e:
-            print("OLLAMA REQUEST ERROR:", str(e))
+            print("GROQ REQUEST ERROR:", str(e))
             raise
 
-    raise ValueError("Ollama failed to generate a response.")
-
+    raise ValueError("Groq failed to generate a response.")
 
 def _make_summary(explanation: str) -> str:
     sentences = re.split(r'(?<=[.!?])\s+', explanation.strip())
@@ -218,9 +211,9 @@ def generate_tutor_response(user_input: str, session_id: str = "default") -> dic
                 time.sleep(3)
     if last_error:
         msg = (
-            "Ollama is taking too long. Please try again."
+            "Groq is taking too long. Please try again."
             if last_error == "timeout"
-            else "Could not reach Ollama. Is it running?"
+            else "Could not reach Groq. Please check the API configuration."
         )
         return {"explanation": msg, "summary": "", "quiz": [], "lang": lang}
 
