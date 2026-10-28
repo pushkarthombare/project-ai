@@ -5,3 +5,8 @@ memory.db
 .env
 node_modules/
 dist/
+venv/
+.env
+node_modules/
+__pycache__/
+dist/
