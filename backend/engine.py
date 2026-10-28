@@ -87,6 +87,9 @@ def _call(
 
             print("GROQ STATUS:", resp.status_code)
 
+            if not resp.ok:
+                print("GROQ ERROR BODY:",resp.text)
+                
             resp.raise_for_status()
 
             data = resp.json()
